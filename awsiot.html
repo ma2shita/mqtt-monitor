@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="UTF-8">
   <title>json monitor</title>
@@ -66,6 +67,7 @@
             <div class="uk-margin">
               <div class="uk-form-controls">
                 <button type="button" @click="action()" class="uk-button uk-button-default">{{op}}</button>
+                <button type="button" @click="reset()" :disabled="connected" class="uk-button uk-button-default">Reset</button>
               </div>
             </div>
           </form>
@@ -124,7 +126,7 @@
             <div class="uk-margin">
               <label class="uk-form-label" for="sending-content">Content</label>
               <div class="uk-form-controls">
-                <textarea id="sending-content" v-model="sending_content" :disabled="!connected" class="uk-textarea" rows="5"></textarea>
+                <textarea id="sending-content" v-model="publish_content" :disabled="!connected" class="uk-textarea" rows="5"></textarea>
               </div>
             </div>
             <div class="uk-margin">
@@ -200,13 +202,17 @@
         <div>
           <dl class="uk-description-list">
             <dt>Reference</dt>
-            <dd><a href="https://github.com/ma2shita/mqtt-monitor">github.com/ma2shita/mqtt-monitor</a></dd>
+            <dd>
+              <a href="https://github.com/ma2shita/mqtt-monitor">github.com/ma2shita/mqtt-monitor</a>
+            </dd>
           </dl>
         </div>
         <div>
           <dl class="uk-description-list">
             <dt>License</dt>
-            <dd>MIT / Copyright 2017 <a href="https://twitter.com/ma2shita">Kohei MATSUSHITA</a></dd>
+            <dd>MIT / Copyright 2017
+              <a href="https://twitter.com/ma2shita">Kohei MATSUSHITA</a>
+            </dd>
           </dl>
         </div>
       </div>
@@ -224,8 +230,8 @@
     el: '#app1',
     data: {
       mqtt: null,
-      op: 'connect',  /* for UX */
-      connected: false,  /* for UX */
+      op: 'connect', /* for UX */
+      connected: false, /* for UX */
       connectSettings: {
         cognitoIdentityPoolId: '',
         clientId: ''
@@ -234,8 +240,8 @@
       subscribed: [],
       received_items: [],
       publish_to: '',
-      sent_items: [],
-      sending_content: ''
+      publish_content: '',
+      sent_items: []
     },
     methods: {
       action: function () {
@@ -261,7 +267,7 @@
               UIkit.notification(`onConnectionLost: ${e.errorMessage}`, { status: 'warning', timeout: 3000 }); /* for UX */
             }
             self.connected = self.mqtt.isConnected(); /* for UX */
-            self.op = 'connect';
+            self.op = 'connect'; /* for UX */
           };
           self.mqtt.connect({
             useSSL: true,
@@ -269,7 +275,9 @@
             onSuccess: function () {
               UIkit.notification("Connected", { status: 'success', timeout: 1000 }); /* for UX */
               self.connected = self.mqtt.isConnected(); /* for UX */
-              self.op = 'disconnect';
+              sessionStorage.cognitoIdentityPoolId = self.connectSettings.cognitoIdentityPoolId; /* for UX */
+              sessionStorage.clientId = self.connectSettings.clientId; /* for UX */
+              self.op = 'disconnect'; /* for UX */
             },
             onFailure: function (e) {
               console.log(e);
@@ -293,21 +301,31 @@
         this.subscribed.splice(this.subscribed.indexOf(topic), 1);
       },
       send: function () {
-        this.mqtt.send(this.publish_to, this.sending_content, 0, false);
-        var message = { topic: this.publish_to, content: this.sending_content, timestamp: moment() };
+        this.mqtt.send(this.publish_to, this.publish_content, 0, false);
+        var message = { topic: this.publish_to, content: this.publish_content, timestamp: moment() };
         this.sent_items.unshift(message);
         this.sending_message = ''; /* for UX */
       },
-      generateClientId: function () {
+      generateClientId: function () { /* for UX */
         this.connectSettings.clientId = `${clientIdPrefix}${Math.random().toString(36).substring(7)}`;
+      },
+      reset: function () { /* for UX */
+        sessionStorage.clear();
+        this.connectSettings.cognitoIdentityPoolId = '';
+        this.connectSettings.clientId = '';
       }
     }
   });
 
   window.onload = function () {
     moment.locale('ja');
-    app1.connectSettings.cognitoIdentityPoolId = defaultCognitoIdentityPoolId; /* for UX */
-    app1.generateClientId(); /* for UX */
+    if (sessionStorage.cognitoIdentityPoolId && sessionStorage.clientId) { /* for UX */
+      app1.connectSettings.cognitoIdentityPoolId = sessionStorage.cognitoIdentityPoolId;
+      app1.connectSettings.clientId = sessionStorage.clientId;
+    } else {
+      app1.connectSettings.cognitoIdentityPoolId = defaultCognitoIdentityPoolId;
+      app1.generateClientId();
+    }
     app1.subscribe_on = `${app1.connectSettings.clientId}/msg/#`; /* for UX */
     app1.publish_to = `${app1.connectSettings.clientId}/msg/a`; /* for UX */
   };
