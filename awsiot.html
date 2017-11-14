@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>json monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/vue"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.145.0/aws-sdk.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.13.0/moment.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.2/rollups/sha256.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.2/rollups/hmac-sha256.js"></script>
+  <script src="https://cdn.rawgit.com/ma2shita/2c5a4c29242dd5382b05ce941731fd41/raw/eb4bc16c02e7a72bbd0086e937050c258da09a20/sigv4utils.js"></script>
+
+  <!-- UIkit CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-beta.34/css/uikit.min.css" />
+
+  <!-- UIkit JS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-beta.34/js/uikit.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-beta.34/js/uikit-icons.min.js"></script>
+</head>
+
+<body>
+  <div class="uk-section-primary">
+    <nav uk-navbar class="uk-navbar-container uk-navbar-transparent">
+      <div class="uk-navbar-left">
+        <a class="uk-navbar-item uk-logo">AWS IoT Monitor (MQTT over Websocket)</a>
+      </div>
+    </nav>
+  </div>
+  <div class="uk-container uk-margin">
+    <div id="app1">
+      <ul uk-tab>
+        <li>
+          <a href="#">Settings</a>
+        </li>
+        <li>
+          <a href="#">Subscribe</a>
+        </li>
+        <li>
+          <a href="#">Publish</a>
+        </li>
+        <li>
+          <a href="#">ETC</a>
+        </li>
+      </ul>
+
+      <ul class="uk-switcher uk-margin">
+        <li>
+          <!-- Settings -->
+          <form class="uk-form-stacked">
+            <div class="uk-margin">
+              <label class="uk-form-label" for="cognito-identity-pool-id">CognitoIdentityPoolId for AWS IoT</label>
+              <div class="uk-form-controls">
+                <input type="text" id="cognito-identity-pool-id" v-model="connectSettings.cognitoIdentityPoolId" :disabled="connected" class="uk-input"
+                  placeholder="e.g.) ap-northeast-1:c2e69282-...">
+              </div>
+            </div>
+            <div class="uk-margin">
+              <label class="uk-form-label" for="client-id">ClientId for AWS IoT /
+                <button type="button" @click="generateClientId()" :disabled="connected" class="uk-button uk-button-link">Generate</button>
+              </label>
+              <div class="uk-form-controls">
+                <input type="text" id="client-id" v-model="connectSettings.clientId" :disabled="connected" class="uk-input" placeholder="e.g.) anyClientId">
+              </div>
+            </div>
+            <div class="uk-margin">
+              <div class="uk-form-controls">
+                <button type="button" @click="action()" class="uk-button uk-button-default">{{op}}</button>
+              </div>
+            </div>
+          </form>
+        </li>
+
+        <li>
+          <!-- Subscrbe -->
+          <form class="uk-form-stacked">
+            <div class="uk-margin">
+              <label class="uk-form-label" for="subscribe-on">Topic</label>
+              <div class="uk-form-controls">
+                <input type="text" id="subscribe-on" v-model="subscribe_on" :disabled="!connected" class="uk-input" placeholder="e.g.) my/topic/#">
+              </div>
+            </div>
+            <div class="uk-margin">
+              <div class="uk-form-controls">
+                <button type="button" @click="subscribe()" :disabled="!connected" class="uk-button uk-button-default">Add Subscribe</button>
+              </div>
+            </div>
+          </form>
+          <h3 class="uk-heading-line">
+            <span>Subscribing</span>
+          </h3>
+          <ul class="uk-list">
+            <li v-for="item in subscribed">
+              <a href="#" @click="unsubscribe(item)" uk-icon="icon: minus-circle"></a>{{ item }}
+            </li>
+          </ul>
+
+          <h3 class="uk-heading-line">
+            <span>Monitoring</span>
+          </h3>
+          <ul class="uk-list">
+            <li v-for="item in received_items">
+              <div class="uk-card uk-card-default uk-card-small">
+                <div class="uk-card-body">
+                  <pre>{{ item.payloadString }}</pre>
+                </div>
+                <div class="uk-card-footer uk-text-meta">
+                  {{ item.timestamp.format() }} | {{ item.destinationName }}
+                </div>
+              </div>
+            </li>
+          </ul>
+        </li>
+
+        <li>
+          <!-- Publish -->
+          <form class="uk-form-stacked">
+            <div class="uk-margin">
+              <label class="uk-form-label" for="dest-topic">Topic</label>
+              <div class="uk-form-controls">
+                <input type="text" id="dest-topic" v-model="publish_to" :disabled="!connected" class="uk-input" placeholder="e.g.) my/topic">
+              </div>
+            </div>
+            <div class="uk-margin">
+              <label class="uk-form-label" for="sending-content">Content</label>
+              <div class="uk-form-controls">
+                <textarea id="sending-content" v-model="sending_content" :disabled="!connected" class="uk-textarea" rows="5"></textarea>
+              </div>
+            </div>
+            <div class="uk-margin">
+              <div class="uk-form-controls">
+                <button type="button" @click="send()" :disabled="!connected" class="uk-button uk-button-default">Publish</button>
+              </div>
+            </div>
+          </form>
+          <h3 class="uk-heading-line">
+            <span>History</span>
+          </h3>
+          <ul class="uk-list">
+            <li v-for="item in sent_items">
+              <div class="uk-card uk-card-default uk-card-small">
+                <div class="uk-card-body">
+                  <pre>{{ item.content }}</pre>
+                </div>
+                <div class="uk-card-footer uk-text-meta">
+                  {{ item.timestamp.format() }} | {{ item.topic }}
+                </div>
+              </div>
+            </li>
+          </ul>
+        </li>
+
+        <li>
+          <!-- ETC -->
+          <h4>Start instruction</h4>
+          <ol class="uk-list uk-list-bullet">
+            <li>Cognito > フェデレーテッドユーザーアイデンティティ</li>
+            <li>新しいプールIDの作成</li>
+            <li>プール名:任意、認証されていない ID に対してアクセスを有効にする:チェック > プール作成</li>
+            <li>ロール:新規作成 > 許可</li>
+            <li>ID プールの編集 > ID プールの ID を得る</li>
+            <li>IAM</li>
+            <li>ロール > Cognito_*Unauth_Role</li>
+            <li>ポリシーのアタッチ > AWSIoTDataAccess にチェック > ポリシーのアタッチ</li>
+          </ol>
+
+          <h4>End instruction</h4>
+          <ol class="uk-list uk-list-bullet">
+            <li>Cognito > フェデレーテッドユーザーアイデンティティ</li>
+            <li>削除対象のIDプールをクリック > IDプールの編集 > IDプールの削除</li>
+            <li>IAM</li>
+            <li>ロール > Cognito_*Unauth_Role と Cognito_*Auth_Role を削除</li>
+          </ol>
+
+          <h4>Using components</h4>
+          <ul class="uk-list uk-list-bullet">
+            <li>Vue.js</li>
+            <li>UIKit</li>
+            <li>mqttws31.js by paho-mqtt</li>
+            <li>aws-sdk</li>
+            <li>moment.js</li>
+            <li>crypto-js</li>
+            <li>sigv4utils.js</li>
+          </ul>
+
+          <h4>Trouble shooting</h4>
+          <ul class="uk-list uk-list-bullet">
+            <li>
+              <code>AMQJS0007E Socket error:undefined.</code> > Not found CognitoIdentityPoolId or Network unreachable</li>
+            <li>
+              <code>AMQJS0008I Socket closed.</code> > Not Attach AWSIoTDataAccess on CognitoIdentityPool</li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </div>
+  <div class="uk-section uk-section-muted">
+    <div class="uk-container">
+      <div uk-grid class="uk-grid-match uk-child-width-1-2@m">
+        <div>
+          <dl class="uk-description-list">
+            <dt>Reference</dt>
+            <dd><a href="https://github.com/ma2shita/mqtt-monitor">github.com/ma2shita/mqtt-monitor</a></dd>
+          </dl>
+        </div>
+        <div>
+          <dl class="uk-description-list">
+            <dt>License</dt>
+            <dd>MIT / Copyright 2017 <a href="https://twitter.com/ma2shita">Kohei MATSUSHITA</a></dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+
+<script>
+  const defaultCognitoIdentityPoolId = 'ap-northeast-1:68f7f158-6d53-46bc-ac63-f143faddfadf'; /* nullable */
+  const clientIdPrefix = 'mqtt_mon_'; /* required */
+</script>
+
+<script>
+  var app1 = new Vue({
+    el: '#app1',
+    data: {
+      mqtt: null,
+      op: 'connect',  /* for UX */
+      connected: false,  /* for UX */
+      connectSettings: {
+        cognitoIdentityPoolId: '',
+        clientId: ''
+      },
+      subscribe_on: '',
+      subscribed: [],
+      received_items: [],
+      publish_to: '',
+      sent_items: [],
+      sending_content: ''
+    },
+    methods: {
+      action: function () {
+        eval('this.' + this.op + '()'); /* NOTE: 文字列結合で直接評価。if(op==connect){this.connect()}といった冗長的な振り分けを省略する */
+      },
+      connect: function () {
+        AWS.config.region = this.connectSettings.cognitoIdentityPoolId.split(':')[0];
+        AWS.config.credentials = new AWS.CognitoIdentityCredentials({ IdentityPoolId: this.connectSettings.cognitoIdentityPoolId });
+        var self = this; /* ref: https://qiita.com/takeharu/items/9935ce476a17d6258e27 */
+        var cred = AWS.config.credentials;  /* for Short-hand */
+        cred.get(function () {
+          var endpoint = SigV4Utils.getSignedUrl("wss", `data.iot.${AWS.config.region}.amazonaws.com`, "/mqtt", "iotdevicegateway", AWS.config.region, cred.accessKeyId, cred.secretAccessKey, cred.sessionToken);
+          self.mqtt = new Paho.MQTT.Client(endpoint, self.connectSettings.clientId);
+          self.mqtt.onMessageArrived = function (message) {
+            message["timestamp"] = moment();
+            self.received_items.unshift(message);
+          };
+          self.mqtt.onConnectionLost = function (e) {
+            if (e.errorCode === 0) {
+              UIkit.notification("Disconnected", { status: 'success', timeout: 1000 }); /* for UX */
+            } else {
+              console.log(e);
+              UIkit.notification(`onConnectionLost: ${e.errorMessage}`, { status: 'warning', timeout: 3000 }); /* for UX */
+            }
+            self.connected = self.mqtt.isConnected(); /* for UX */
+            self.op = 'connect';
+          };
+          self.mqtt.connect({
+            useSSL: true,
+            mqttVersion: 4,
+            onSuccess: function () {
+              UIkit.notification("Connected", { status: 'success', timeout: 1000 }); /* for UX */
+              self.connected = self.mqtt.isConnected(); /* for UX */
+              self.op = 'disconnect';
+            },
+            onFailure: function (e) {
+              console.log(e);
+              UIkit.notification(`onFailure: ${e.errorMessage}`, { status: 'warning', timeout: 3000 }); /* for UX */
+            }
+          });
+        });
+      },
+      disconnect: function () {
+        this.mqtt.disconnect();
+        /* NOTE: other behavior in onConnectionLost */
+      },
+      subscribe: function () {
+        if (this.subscribed.indexOf(this.subscribe_on) === -1) { /* avoid dup subscribe */
+          this.mqtt.subscribe(this.subscribe_on);
+          this.subscribed.push(this.subscribe_on);
+        }
+      },
+      unsubscribe: function (topic) {
+        this.mqtt.unsubscribe(topic);
+        this.subscribed.splice(this.subscribed.indexOf(topic), 1);
+      },
+      send: function () {
+        this.mqtt.send(this.publish_to, this.sending_content, 0, false);
+        var message = { topic: this.publish_to, content: this.sending_content, timestamp: moment() };
+        this.sent_items.unshift(message);
+        this.sending_message = ''; /* for UX */
+      },
+      generateClientId: function () {
+        this.connectSettings.clientId = `${clientIdPrefix}${Math.random().toString(36).substring(7)}`;
+      }
+    }
+  });
+
+  window.onload = function () {
+    moment.locale('ja');
+    app1.connectSettings.cognitoIdentityPoolId = defaultCognitoIdentityPoolId; /* for UX */
+    app1.generateClientId(); /* for UX */
+    app1.subscribe_on = `${app1.connectSettings.clientId}/msg/#`; /* for UX */
+    app1.publish_to = `${app1.connectSettings.clientId}/msg/a`; /* for UX */
+  };
+</script>
+
+</html>
