@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>  
+<html>
 
 <head>
   <meta charset="UTF-8">
@@ -67,7 +67,8 @@
             </div>
             <div class="uk-margin">
               <div class="uk-form-controls">
-                <button type="button" @click="action()" class="uk-button uk-button-default">{{op}}</button>
+                <button type="button" @click="action()" class="uk-button uk-button-default">{{ op }}</button>
+                <!-- for UX -->
                 <button type="button" @click="reset()" :disabled="connected" class="uk-button uk-button-default">Reset</button>
               </div>
             </div>
@@ -78,9 +79,9 @@
           <!-- Subscrbe -->
           <form class="uk-form-stacked">
             <div class="uk-margin">
-              <label class="uk-form-label" for="subscribe-on">Topic</label>
+              <label class="uk-form-label" for="publish-to">Topic</label>
               <div class="uk-form-controls">
-                <input type="text" id="subscribe-on" v-model="subscribe_on" :disabled="!connected" class="uk-input" placeholder="e.g.) my/topic/#">
+                <input type="text" id="publish-to" v-model="subscribe_on" :disabled="!connected" class="uk-input" placeholder="e.g.) my/topic/#">
               </div>
             </div>
             <div class="uk-margin">
@@ -118,20 +119,20 @@
           <!-- Publish -->
           <form class="uk-form-stacked">
             <div class="uk-margin">
-              <label class="uk-form-label" for="dest-topic">Topic</label>
+              <label class="uk-form-label" for="publish-to">Topic</label>
               <div class="uk-form-controls">
-                <input type="text" id="dest-topic" v-model="publish_to" :disabled="!connected" class="uk-input" placeholder="e.g.) my/topic">
+                <input type="text" id="publish-to" v-model="publish_to" :disabled="!connected" class="uk-input" placeholder="e.g.) my/topic">
               </div>
             </div>
             <div class="uk-margin">
-              <label class="uk-form-label" for="sending-content">Content</label>
+              <label class="uk-form-label" for="publish-content">Content</label>
               <div class="uk-form-controls">
-                <textarea id="sending-content" v-model="publish_content" :disabled="!connected" class="uk-textarea" rows="5"></textarea>
+                <textarea id="publish-content" v-model="publish_content" :disabled="!connected" class="uk-textarea" rows="5"></textarea>
               </div>
             </div>
             <div class="uk-margin">
               <div class="uk-form-controls">
-                <button type="button" @click="send()" :disabled="!connected" class="uk-button uk-button-default">Publish</button>
+                <button type="button" @click="publish()" :disabled="!connected" class="uk-button uk-button-default">Publish</button>
               </div>
             </div>
           </form>
@@ -183,6 +184,7 @@
       </ul>
     </div>
   </div>
+
   <div class="uk-section uk-section-muted">
     <div class="uk-container">
       <div uk-grid class="uk-grid-match uk-child-width-1-2@s">
@@ -208,8 +210,8 @@
 </body>
 
 <script>
-  const defaultCognitoIdentityPoolId = ''; /* nullable */
-  const clientIdPrefix = 'mqtt_mon_'; /* required */
+  const defaultCognitoIdentityPoolId = ''; /* for UX. nullable */
+  const clientIdPrefix = 'mqtt_mon_'; /* required for connect to AWS IoT */
 </script>
 
 <script>
@@ -217,7 +219,7 @@
     el: '#app1',
     data: {
       mqtt: null,
-      op: 'connect', /* for UX */
+      op: 'connect',
       connected: false, /* for UX */
       connectSettings: {
         cognitoIdentityPoolId: '',
@@ -232,7 +234,7 @@
     },
     methods: {
       action: function () {
-        eval('this.' + this.op + '()'); /* NOTE: 文字列結合で直接評価。if(op==connect){this.connect()}といった冗長的な振り分けを省略する */
+        eval('this.' + this.op + '()'); /* NOTE: Avoiding `if(op==connect){this.connect()}` */
       },
       connect: function () {
         AWS.config.region = this.connectSettings.cognitoIdentityPoolId.split(':')[0];
@@ -247,14 +249,14 @@
             self.received_items.unshift(message);
           };
           self.mqtt.onConnectionLost = function (e) {
-            if (e.errorCode === 0) {
-              UIkit.notification("Disconnected", { status: 'success', timeout: 1000 }); /* for UX */
-            } else {
+            if (e.errorCode !== 0) {
               console.log(e);
               UIkit.notification(`onConnectionLost: ${e.errorMessage}`, { status: 'warning', timeout: 3000 }); /* for UX */
+            } else {
+              UIkit.notification("Disconnected", { status: 'success', timeout: 1000 }); /* for UX */
             }
             self.connected = self.mqtt.isConnected(); /* for UX */
-            self.op = 'connect'; /* for UX */
+            self.op = 'connect';
           };
           self.mqtt.connect({
             useSSL: true,
@@ -264,7 +266,7 @@
               self.connected = self.mqtt.isConnected(); /* for UX */
               sessionStorage.cognitoIdentityPoolId = self.connectSettings.cognitoIdentityPoolId; /* for UX */
               sessionStorage.clientId = self.connectSettings.clientId; /* for UX */
-              self.op = 'disconnect'; /* for UX */
+              self.op = 'disconnect';
             },
             onFailure: function (e) {
               console.log(e);
@@ -281,17 +283,19 @@
         if (this.subscribed.indexOf(this.subscribe_on) === -1) { /* avoid dup subscribe */
           this.mqtt.subscribe(this.subscribe_on);
           this.subscribed.push(this.subscribe_on);
+          sessionStorage.latest_subscribe_on = this.subscribe_on; /* for UX */
         }
       },
       unsubscribe: function (topic) {
         this.mqtt.unsubscribe(topic);
         this.subscribed.splice(this.subscribed.indexOf(topic), 1);
       },
-      send: function () {
+      publish: function () {
         this.mqtt.send(this.publish_to, this.publish_content, 0, false);
         var message = { topic: this.publish_to, content: this.publish_content, timestamp: moment() };
         this.sent_items.unshift(message);
         this.sending_message = ''; /* for UX */
+        sessionStorage.latest_publish_to = this.publish_to; /* for UX */
       },
       generateClientId: function () { /* for UX */
         this.connectSettings.clientId = `${clientIdPrefix}${Math.random().toString(36).substring(7)}`;
@@ -305,16 +309,18 @@
   });
 
   window.onload = function () {
-    moment.locale('ja');
+    moment.locale('ja'); /* for UX */
     if (sessionStorage.cognitoIdentityPoolId && sessionStorage.clientId) { /* for UX */
       app1.connectSettings.cognitoIdentityPoolId = sessionStorage.cognitoIdentityPoolId;
       app1.connectSettings.clientId = sessionStorage.clientId;
+      app1.subscribe_on = sessionStorage.latest_subscribe_on;
+      app1.publish_to = sessionStorage.latest_publish_to;
     } else {
       app1.connectSettings.cognitoIdentityPoolId = defaultCognitoIdentityPoolId;
       app1.generateClientId();
+      app1.subscribe_on = `${app1.connectSettings.clientId}/msg/#`;
+      app1.publish_to = `${app1.connectSettings.clientId}/msg/a`;
     }
-    app1.subscribe_on = `${app1.connectSettings.clientId}/msg/#`; /* for UX */
-    app1.publish_to = `${app1.connectSettings.clientId}/msg/a`; /* for UX */
   };
 </script>
 
