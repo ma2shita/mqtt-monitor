@@ -6,17 +6,62 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AWS IoT Monitor</title>
   <script src="https://cdn.jsdelivr.net/npm/vue"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.145.0/aws-sdk.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.13.0/moment.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.2/rollups/sha256.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.2/rollups/hmac-sha256.js"></script>
-  <script src="https://cdn.rawgit.com/ma2shita/2c5a4c29242dd5382b05ce941731fd41/raw/eb4bc16c02e7a72bbd0086e937050c258da09a20/sigv4utils.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.181.0/aws-sdk.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.2/mqttws31.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.20.1/moment.min.js"></script>
   <!-- UIkit CSS -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-beta.35/css/uikit.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-beta.36/css/uikit.min.css" />
   <!-- UIkit JS -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-beta.35/js/uikit.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-beta.35/js/uikit-icons.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-beta.36/js/uikit.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-beta.36/js/uikit-icons.min.js"></script>
+  <script>/* from https://docs.aws.amazon.com/ja_jp/iot/latest/developerguide/protocols.html */
+    /**
+     * utilities to do sigv4
+     * @class SigV4Utils
+     */
+    function SigV4Utils() { }
+
+    SigV4Utils.getSignatureKey = function (key, date, region, service) {
+      var kDate = AWS.util.crypto.hmac('AWS4' + key, date, 'buffer');
+      var kRegion = AWS.util.crypto.hmac(kDate, region, 'buffer');
+      var kService = AWS.util.crypto.hmac(kRegion, service, 'buffer');
+      var kCredentials = AWS.util.crypto.hmac(kService, 'aws4_request', 'buffer');
+      return kCredentials;
+    };
+
+    SigV4Utils.getSignedUrl = function (host, region, credentials) {
+      var datetime = AWS.util.date.iso8601(new Date()).replace(/[:\-]|\.\d{3}/g, '');
+      var date = datetime.substr(0, 8);
+
+      var method = 'GET';
+      var protocol = 'wss';
+      var uri = '/mqtt';
+      var service = 'iotdevicegateway';
+      var algorithm = 'AWS4-HMAC-SHA256';
+
+      var credentialScope = date + '/' + region + '/' + service + '/' + 'aws4_request';
+      var canonicalQuerystring = 'X-Amz-Algorithm=' + algorithm;
+      canonicalQuerystring += '&X-Amz-Credential=' + encodeURIComponent(credentials.accessKeyId + '/' + credentialScope);
+      canonicalQuerystring += '&X-Amz-Date=' + datetime;
+      canonicalQuerystring += '&X-Amz-SignedHeaders=host';
+
+      var canonicalHeaders = 'host:' + host + '\n';
+      var payloadHash = AWS.util.crypto.sha256('', 'hex')
+      var canonicalRequest = method + '\n' + uri + '\n' + canonicalQuerystring + '\n' + canonicalHeaders + '\nhost\n' + payloadHash;
+
+      var stringToSign = algorithm + '\n' + datetime + '\n' + credentialScope + '\n' + AWS.util.crypto.sha256(canonicalRequest, 'hex');
+      var signingKey = SigV4Utils.getSignatureKey(credentials.secretAccessKey, date, region, service);
+      var signature = AWS.util.crypto.hmac(signingKey, stringToSign, 'hex');
+
+      canonicalQuerystring += '&X-Amz-Signature=' + signature;
+      if (credentials.sessionToken) {
+        canonicalQuerystring += '&X-Amz-Security-Token=' + encodeURIComponent(credentials.sessionToken);
+      }
+
+      var requestUrl = protocol + '://' + host + uri + '?' + canonicalQuerystring;
+      return requestUrl;
+    };
+  </script>
 </head>
 
 <body>
@@ -240,7 +285,7 @@
         var self = this; /* ref: https://qiita.com/takeharu/items/9935ce476a17d6258e27 */
         var cred = AWS.config.credentials;  /* for Short-hand */
         cred.get(function () {
-          var endpoint = SigV4Utils.getSignedUrl("wss", `data.iot.${AWS.config.region}.amazonaws.com`, "/mqtt", "iotdevicegateway", AWS.config.region, cred.accessKeyId, cred.secretAccessKey, cred.sessionToken);
+          var endpoint = SigV4Utils.getSignedUrl(`data.iot.${AWS.config.region}.amazonaws.com`, AWS.config.region, cred);
           self.mqtt = new Paho.MQTT.Client(endpoint, self.connectSettings.clientId);
           self.mqtt.onMessageArrived = function (message) {
             message["timestamp"] = moment();
