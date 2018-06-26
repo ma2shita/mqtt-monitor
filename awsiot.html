@@ -334,6 +334,8 @@
               self.connected = self.mqtt.isConnected(); /* for UX */
               sessionStorage.cognitoIdentityPoolId = self.connectSettings.cognitoIdentityPoolId; /* for UX */
               sessionStorage.clientId = self.connectSettings.clientId; /* for UX */
+              self.subscribe_on = `${self.connectSettings.clientId}/msg/#`; /* for UX */
+              self.publish_to = `${self.connectSettings.clientId}/msg/a`; /* for UX */
               self.op = 'disconnect';
             },
             onFailure: function (e) {
@@ -351,7 +353,6 @@
         if (this.subscribed.indexOf(this.subscribe_on) === -1) { /* avoid dup subscribe */
           this.mqtt.subscribe(this.subscribe_on);
           this.subscribed.push(this.subscribe_on);
-          sessionStorage.latest_subscribe_on = this.subscribe_on; /* for UX */
         }
       },
       unsubscribe: function (topic) {
@@ -363,7 +364,6 @@
         var message = { topic: this.publish_to, content: this.publish_content, timestamp: moment() };
         this.sent_items.unshift(message);
         this.sending_message = ''; /* for UX */
-        sessionStorage.latest_publish_to = this.publish_to; /* for UX */
       },
       generateClientId: function () { /* for UX */
         this.connectSettings.clientId = `${clientIdPrefix}${Math.random().toString(36).substring(7)}`;
@@ -371,7 +371,7 @@
       reset: function () { /* for UX */
         sessionStorage.clear();
         this.connectSettings.cognitoIdentityPoolId = '';
-        this.connectSettings.clientId = '';
+        this.generateClientId();
       }
     }
   });
@@ -381,13 +381,8 @@
     if (sessionStorage.cognitoIdentityPoolId && sessionStorage.clientId) { /* for UX */
       app1.connectSettings.cognitoIdentityPoolId = sessionStorage.cognitoIdentityPoolId;
       app1.connectSettings.clientId = sessionStorage.clientId;
-      app1.subscribe_on = sessionStorage.latest_subscribe_on;
-      app1.publish_to = sessionStorage.latest_publish_to;
     } else {
-      app1.connectSettings.cognitoIdentityPoolId = defaultCognitoIdentityPoolId;
-      app1.generateClientId();
-      app1.subscribe_on = `${app1.connectSettings.clientId}/msg/#`;
-      app1.publish_to = `${app1.connectSettings.clientId}/msg/a`;
+      app1.reset();
     }
   };
 </script>

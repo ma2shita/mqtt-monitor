@@ -5,10 +5,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MQTT over WebScoket Monitor</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.5.16/vue.min.js" integrity="sha256-TaLceMwjWRqe4yhbqPOJH6V7UGt5AvvdNfpaIXJWbFU=" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/purl/2.3.1/purl.min.js" integrity="sha256-9BB5wAYYFUdxzdiiCeK81JlSgAGOW++0lcGL0FAI3Jo=" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.2/mqttws31.min.js" integrity="sha256-UplsBBNj5zR16Nyo1bVLLVd0ndtLYs0A5c4WrbK/etU=" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/moment.min.js" integrity="sha256-CutOzxCRucUsn6C6TcEYsauvvYilEniTXldPa6/wu0k=" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.5.16/vue.min.js" integrity="sha256-TaLceMwjWRqe4yhbqPOJH6V7UGt5AvvdNfpaIXJWbFU="
+    crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/purl/2.3.1/purl.min.js" integrity="sha256-9BB5wAYYFUdxzdiiCeK81JlSgAGOW++0lcGL0FAI3Jo="
+    crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.2/mqttws31.min.js" integrity="sha256-UplsBBNj5zR16Nyo1bVLLVd0ndtLYs0A5c4WrbK/etU="
+    crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/moment.min.js" integrity="sha256-CutOzxCRucUsn6C6TcEYsauvvYilEniTXldPa6/wu0k="
+    crossorigin="anonymous"></script>
   <!-- UIkit CSS -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-rc.6/css/uikit.min.css" integrity="sha256-Ug5hzlr8xis3rZZpWpE6ViCx2G8He4kO4w2azn+3A7Y="
     crossorigin="anonymous" />
@@ -201,6 +205,7 @@
 </body>
 
 <script>
+  const defaultEndpointAddress = ''; /* for UX. nullable */
   const clientIdPrefix = 'mqtt_mon_'; /* required for connect to MQTT server */
 </script>
 <script>
@@ -251,7 +256,10 @@
           onSuccess: function () {
             UIkit.notification("Connected", { status: 'success', timeout: 1000 }); /* for UX */
             self.connected = self.mqtt.isConnected(); /* for UX */
+            sessionStorage.endpointAddress = self.connectSettings.endpointAddress; /* for UX */
             sessionStorage.clientId = self.connectSettings.clientId; /* for UX */
+            self.subscribe_on = `${self.connectSettings.clientId}/msg/#`; /* for UX */
+            self.publish_to = `${self.connectSettings.clientId}/msg/a`; /* for UX */
             self.op = 'disconnect';
           },
           onFailure: function (e) {
@@ -268,7 +276,6 @@
         if (this.subscribed.indexOf(this.subscribe_on) === -1) { /* avoid dup subscribe */
           this.mqtt.subscribe(this.subscribe_on);
           this.subscribed.push(this.subscribe_on);
-          sessionStorage.latest_subscribe_on = this.subscribe_on; /* for UX */
         }
       },
       unsubscribe: function (topic) {
@@ -280,28 +287,25 @@
         var message = { topic: this.publish_to, content: this.publish_content, timestamp: moment() };
         this.sent_items.unshift(message);
         this.sending_message = ''; /* for UX */
-        sessionStorage.latest_publish_to = this.publish_to; /* for UX */
       },
       generateClientId: function () { /* for UX */
         this.connectSettings.clientId = `${clientIdPrefix}${Math.random().toString(36).substring(7)}`;
       },
       reset: function () { /* for UX */
         sessionStorage.clear();
-        this.connectSettings.clientId = '';
+        this.connectSettings.endpointAddress = defaultEndpointAddress;
+        this.generateClientId();
       }
     }
   });
 
   window.onload = function () {
     moment.locale('ja'); /* for UX */
-    if (sessionStorage.clientId) { /* for UX */
+    if (sessionStorage.endpointAddress && sessionStorage.clientId) { /* for UX */
+      app1.connectSettings.endpointAddress = sessionStorage.endpointAddress;
       app1.connectSettings.clientId = sessionStorage.clientId;
-      app1.subscribe_on = sessionStorage.latest_subscribe_on;
-      app1.publish_to = sessionStorage.latest_publish_to;
     } else {
-      app1.generateClientId();
-      app1.subscribe_on = `${app1.connectSettings.clientId}/msg/#`;
-      app1.publish_to = `${app1.connectSettings.clientId}/msg/a`;
+      app1.reset();
     }
   };
 </script>
@@ -310,4 +314,5 @@
   crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-rc.6/js/uikit-icons.min.js" integrity="sha256-w38UjohynFpNOMjhZJ/oUIo/Md7D4tpQQJri5qDDTlE="
   crossorigin="anonymous"></script>
+
 </html>
