@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MQTT over WebScoket monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/vue"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.2/mqttws31.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.20.1/moment.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/purl/2.3.1/purl.js"></script>
+  <!-- UIkit CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-rc.6/css/uikit.min.css" integrity="sha256-Ug5hzlr8xis3rZZpWpE6ViCx2G8He4kO4w2azn+3A7Y="
+    crossorigin="anonymous" />
+  <style>
+    .list-item {
+      display: inline-block;
+      margin-right: 10px;
+    }
+
+    .list-enter-active,
+    .list-leave-active {
+      transition: all .25s;
+    }
+
+    .list-enter,
+    .list-leave-to
+    /* .list-leave-active for below version 2.1.8 */
+
+      {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="uk-section-primary">
+    <nav uk-navbar class="uk-navbar-container uk-navbar-transparent">
+      <div class="uk-navbar-left">
+        <span class="uk-navbar-item">MQTT over WebScoket monitor</span>
+      </div>
+    </nav>
+  </div>
+  <div class="uk-container uk-margin">
+    <div id="app1">
+      <ul uk-tab>
+        <li>
+          <a href="#">Settings</a>
+        </li>
+        <li>
+          <a href="#">Subscribe</a>
+        </li>
+        <li>
+          <a href="#">Publish</a>
+        </li>
+        <li>
+          <a href="#">ETC</a>
+        </li>
+      </ul>
+
+      <ul class="uk-switcher uk-margin">
+        <li>
+          <!-- Settings -->
+          <form class="uk-form-stacked">
+            <div class="uk-margin">
+              <label class="uk-form-label" for="endpoint-address">WebSocket server address</label>
+              <div class="uk-form-controls">
+                <input type="text" id="endpoint-address" v-model="connectSettings.endpointAddress" :disabled="connected" class="uk-input"
+                  placeholder="e.g.) wss://username:password@ANY.mq.REGION.amazonaws.com:61619">
+              </div>
+            </div>
+            <div class="uk-margin">
+              <label class="uk-form-label" for="client-id">ClientId for MQTT /
+                <button type="button" @click="generateClientId()" :disabled="connected" class="uk-button uk-button-link">Generate</button>
+              </label>
+              <div class="uk-form-controls">
+                <input type="text" id="client-id" v-model="connectSettings.clientId" :disabled="connected" class="uk-input" placeholder="e.g.) anyClientId">
+              </div>
+            </div>
+            <div class="uk-margin">
+              <div class="uk-form-controls">
+                <button type="button" @click="action()" class="uk-button uk-button-default">{{ op }}</button>
+                <!-- for UX -->
+                <button type="button" @click="reset()" :disabled="connected" class="uk-button uk-button-default">Reset</button>
+              </div>
+            </div>
+          </form>
+        </li>
+
+        <li>
+          <!-- Subscrbe -->
+          <form class="uk-form-stacked">
+            <div class="uk-margin">
+              <label class="uk-form-label" for="subscribe-on">Topic</label>
+              <div class="uk-form-controls">
+                <input type="text" id="subscribe-on" v-model="subscribe_on" :disabled="!connected" class="uk-input" placeholder="e.g.) my/topic/#">
+              </div>
+            </div>
+            <div class="uk-margin">
+              <div class="uk-form-controls">
+                <button type="button" @click="subscribe()" :disabled="!connected" class="uk-button uk-button-default">Add Subscribe</button>
+              </div>
+            </div>
+          </form>
+          <h3 class="uk-heading-line">
+            <span>Subscribing</span>
+          </h3>
+          <ul class="uk-list">
+            <transition-group name="list">
+              <li v-for="item in subscribed" :key="item">
+                <a href="#" @click="unsubscribe(item)" class="uk-icon-link" uk-icon="trash"></a>
+                <span style="margin-left: .5rem;"></span>{{ item }}
+              </li>
+            </transition-group>
+          </ul>
+          <h3 class="uk-heading-line">
+            <span>Monitoring</span>
+          </h3>
+          <ul class="uk-list">
+            <transition-group name="list">
+              <li v-for="item in received_items" :key="item">
+                <div class="uk-card uk-card-default uk-card-small">
+                  <div class="uk-card-body">
+                    <pre>{{ item.payloadString }}</pre>
+                  </div>
+                  <div class="uk-card-footer uk-text-meta">
+                    {{ item.timestamp.format() }} | {{ item.destinationName }}
+                  </div>
+                </div>
+              </li>
+            </transition-group>
+          </ul>
+        </li>
+
+        <li>
+          <!-- Publish -->
+          <form class="uk-form-stacked">
+            <div class="uk-margin">
+              <label class="uk-form-label" for="subscribe-on">Topic</label>
+              <div class="uk-form-controls">
+                <input type="text" id="subscribe-on" v-model="publish_to" :disabled="!connected" class="uk-input" placeholder="e.g.) my/topic">
+              </div>
+            </div>
+            <div class="uk-margin">
+              <label class="uk-form-label" for="publish-content">Content</label>
+              <div class="uk-form-controls">
+                <textarea id="publish-content" v-model="publish_content" :disabled="!connected" class="uk-textarea" rows="5"></textarea>
+              </div>
+            </div>
+            <div class="uk-margin">
+              <div class="uk-form-controls">
+                <button type="button" @click="publish()" :disabled="!connected" class="uk-button uk-button-default">Publish</button>
+              </div>
+            </div>
+          </form>
+          <h3 class="uk-heading-line">
+            <span>History</span>
+          </h3>
+          <ul class="uk-list">
+            <transition-group name="list">
+              <li v-for="item in sent_items" :key="item">
+                <div class="uk-card uk-card-default uk-card-small">
+                  <div class="uk-card-body">
+                    <pre>{{ item.content }}</pre>
+                  </div>
+                  <div class="uk-card-footer uk-text-meta">
+                    {{ item.timestamp.format() }} | {{ item.topic }}
+                  </div>
+                </div>
+              </li>
+            </transition-group>
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="uk-section uk-section-muted">
+    <div class="uk-container">
+      <div uk-grid class="uk-grid-match uk-child-width-1-2@s">
+        <div>
+          <dl class="uk-description-list">
+            <dt>Reference</dt>
+            <dd>
+              <a href="https://github.com/ma2shita/mqtt-monitor">github.com/ma2shita/mqtt-monitor</a>
+            </dd>
+          </dl>
+        </div>
+        <div>
+          <dl class="uk-description-list">
+            <dt>License</dt>
+            <dd>MIT / Copyright 2018
+              <a href="https://twitter.com/ma2shita">Kohei MATSUSHITA</a>
+            </dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+
+<script>
+  const clientIdPrefix = 'mqtt_mon_'; /* required for connect to MQTT server */
+</script>
+<script>
+  var app1 = new Vue({
+    el: '#app1',
+    data: {
+      mqtt: null,
+      op: 'connect',
+      connected: false, /* for UX */
+      connectSettings: {
+        clientId: ''
+      },
+      subscribe_on: '',
+      subscribed: [],
+      received_items: [],
+      publish_to: '',
+      publish_content: '',
+      sent_items: []
+    },
+    methods: {
+      action: function () {
+        eval('this.' + this.op + '()'); /* NOTE: Avoiding `if(op==connect){this.connect()}` */
+      },
+      connect: function () {
+        var self = this; /* ref: https://qiita.com/takeharu/items/9935ce476a17d6258e27 */
+        var url = purl(self.connectSettings.endpointAddress);
+        self.mqtt = new Paho.MQTT.Client(url.attr("host"), Number(url.attr("port")), self.connectSettings.clientId);
+        self.mqtt.onMessageArrived = function (message) {
+          message["timestamp"] = moment();
+          self.received_items.unshift(message);
+        };
+        self.mqtt.onConnectionLost = function (e) {
+          if (e.errorCode !== 0) {
+            console.log(e);
+            UIkit.notification(`onConnectionLost: ${e.errorMessage}`, { status: 'warning', timeout: 3000 }); /* for UX */
+          } else {
+            UIkit.notification("Disconnected", { status: 'success', timeout: 1000 }); /* for UX */
+          }
+          self.connected = self.mqtt.isConnected(); /* for UX */
+          self.op = 'connect';
+        };
+        self.mqtt.connect({
+          useSSL: true,
+          userName: url.attr("user"),
+          password: url.attr("password"),
+          mqttVersion: 4,
+          onSuccess: function () {
+            UIkit.notification("Connected", { status: 'success', timeout: 1000 }); /* for UX */
+            self.connected = self.mqtt.isConnected(); /* for UX */
+            sessionStorage.clientId = self.connectSettings.clientId; /* for UX */
+            self.op = 'disconnect';
+          },
+          onFailure: function (e) {
+            console.log(e);
+            UIkit.notification(`onFailure: ${e.errorMessage}`, { status: 'warning', timeout: 3000 }); /* for UX */
+          }
+        });
+      },
+      disconnect: function () {
+        this.mqtt.disconnect();
+        /* NOTE: other behavior in onConnectionLost */
+      },
+      subscribe: function () {
+        if (this.subscribed.indexOf(this.subscribe_on) === -1) { /* avoid dup subscribe */
+          this.mqtt.subscribe(this.subscribe_on);
+          this.subscribed.push(this.subscribe_on);
+          sessionStorage.latest_subscribe_on = this.subscribe_on; /* for UX */
+        }
+      },
+      unsubscribe: function (topic) {
+        this.mqtt.unsubscribe(topic);
+        this.subscribed.splice(this.subscribed.indexOf(topic), 1);
+      },
+      publish: function () {
+        this.mqtt.send(this.publish_to, this.publish_content, 0, false);
+        var message = { topic: this.publish_to, content: this.publish_content, timestamp: moment() };
+        this.sent_items.unshift(message);
+        this.sending_message = ''; /* for UX */
+        sessionStorage.latest_publish_to = this.publish_to; /* for UX */
+      },
+      generateClientId: function () { /* for UX */
+        this.connectSettings.clientId = `${clientIdPrefix}${Math.random().toString(36).substring(7)}`;
+      },
+      reset: function () { /* for UX */
+        sessionStorage.clear();
+        this.connectSettings.clientId = '';
+      }
+    }
+  });
+
+  window.onload = function () {
+    moment.locale('ja'); /* for UX */
+    if (sessionStorage.clientId) { /* for UX */
+      app1.connectSettings.clientId = sessionStorage.clientId;
+      app1.subscribe_on = sessionStorage.latest_subscribe_on;
+      app1.publish_to = sessionStorage.latest_publish_to;
+    } else {
+      app1.generateClientId();
+      app1.subscribe_on = `${app1.connectSettings.clientId}/msg/#`;
+      app1.publish_to = `${app1.connectSettings.clientId}/msg/a`;
+    }
+  };
+</script>
+<!-- UIkit JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-rc.6/js/uikit.min.js" integrity="sha256-2O4R+j0Pq+XLeUlXkPznJ0HrSkHA9keocNhV+csu6Zo="
+  crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-rc.6/js/uikit-icons.min.js" integrity="sha256-w38UjohynFpNOMjhZJ/oUIo/Md7D4tpQQJri5qDDTlE="
+  crossorigin="anonymous"></script>
+</html>
