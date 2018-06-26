@@ -14,6 +14,7 @@ Required libraries get from CDN, It works only the `.html` and Internet connecti
     * In Application
         1. Set IdentityPoolId to **CognitoIdentityPoolId for AWS IoT** and **Connect**
         2. Let's Pub/Sub!!
+* `wss.html` : For MQTT over WebSocket.
 
 ## OneLiner WebServer
 
