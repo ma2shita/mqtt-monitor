@@ -137,9 +137,9 @@
           <!-- Publish -->
           <form class="uk-form-stacked">
             <div class="uk-margin">
-              <label class="uk-form-label" for="subscribe-on">Topic</label>
+              <label class="uk-form-label" for="publish-to">Topic</label>
               <div class="uk-form-controls">
-                <input type="text" id="subscribe-on" v-model="publish_to" :disabled="!connected" class="uk-input" placeholder="e.g.) my/topic">
+                <input type="text" id="publish-to" v-model="publish_to" :disabled="!connected" class="uk-input" placeholder="e.g.) my/topic">
               </div>
             </div>
             <div class="uk-margin">
@@ -211,6 +211,7 @@
       op: 'connect',
       connected: false, /* for UX */
       connectSettings: {
+        endpointAddress: '',
         clientId: ''
       },
       subscribe_on: '',
