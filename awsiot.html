@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 
 <head>
   <meta charset="UTF-8">
@@ -10,10 +10,28 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.2/mqttws31.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.20.1/moment.min.js"></script>
   <!-- UIkit CSS -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-beta.36/css/uikit.min.css" />
-  <!-- UIkit JS -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-beta.36/js/uikit.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-beta.36/js/uikit-icons.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-rc.6/css/uikit.min.css" integrity="sha256-Ug5hzlr8xis3rZZpWpE6ViCx2G8He4kO4w2azn+3A7Y="
+    crossorigin="anonymous" />
+  <style>
+    .list-item {
+      display: inline-block;
+      margin-right: 10px;
+    }
+
+    .list-enter-active,
+    .list-leave-active {
+      transition: all .25s;
+    }
+
+    .list-enter,
+    .list-leave-to
+    /* .list-leave-active for below version 2.1.8 */
+
+      {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+  </style>
   <script>/* from https://docs.aws.amazon.com/ja_jp/iot/latest/developerguide/protocols.html */
     /**
      * utilities to do sigv4
@@ -137,24 +155,29 @@
             <span>Subscribing</span>
           </h3>
           <ul class="uk-list">
-            <li v-for="item in subscribed">
-              <a href="#" @click="unsubscribe(item)" uk-icon="icon: minus-circle"></a>{{ item }}
-            </li>
+            <transition-group name="list">
+              <li v-for="item in subscribed" :key="item">
+                <a href="#" @click="unsubscribe(item)" class="uk-icon-link" uk-icon="trash"></a>
+                <span style="margin-left: .5rem;"></span>{{ item }}
+              </li>
+            </transition-group>
           </ul>
           <h3 class="uk-heading-line">
             <span>Monitoring</span>
           </h3>
           <ul class="uk-list">
-            <li v-for="item in received_items">
-              <div class="uk-card uk-card-default uk-card-small">
-                <div class="uk-card-body">
-                  <pre>{{ item.payloadString }}</pre>
+            <transition-group name="list">
+              <li v-for="item in received_items" :key="item">
+                <div class="uk-card uk-card-default uk-card-small">
+                  <div class="uk-card-body">
+                    <pre>{{ item.payloadString }}</pre>
+                  </div>
+                  <div class="uk-card-footer uk-text-meta">
+                    {{ item.timestamp.format() }} | {{ item.destinationName }}
+                  </div>
                 </div>
-                <div class="uk-card-footer uk-text-meta">
-                  {{ item.timestamp.format() }} | {{ item.destinationName }}
-                </div>
-              </div>
-            </li>
+              </li>
+            </transition-group>
           </ul>
         </li>
 
@@ -183,16 +206,18 @@
             <span>History</span>
           </h3>
           <ul class="uk-list">
-            <li v-for="item in sent_items">
-              <div class="uk-card uk-card-default uk-card-small">
-                <div class="uk-card-body">
-                  <pre>{{ item.content }}</pre>
+            <transition-group name="list">
+              <li v-for="item in sent_items" :key="item">
+                <div class="uk-card uk-card-default uk-card-small">
+                  <div class="uk-card-body">
+                    <pre>{{ item.content }}</pre>
+                  </div>
+                  <div class="uk-card-footer uk-text-meta">
+                    {{ item.timestamp.format() }} | {{ item.topic }}
+                  </div>
                 </div>
-                <div class="uk-card-footer uk-text-meta">
-                  {{ item.timestamp.format() }} | {{ item.topic }}
-                </div>
-              </div>
-            </li>
+              </li>
+            </transition-group>
           </ul>
         </li>
 
@@ -242,7 +267,7 @@
         <div>
           <dl class="uk-description-list">
             <dt>License</dt>
-            <dd>MIT / Copyright 2017
+            <dd>MIT / Copyright 2018
               <a href="https://twitter.com/ma2shita">Kohei MATSUSHITA</a>
             </dd>
           </dl>
@@ -366,5 +391,9 @@
     }
   };
 </script>
-
+<!-- UIkit JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-rc.6/js/uikit.min.js" integrity="sha256-2O4R+j0Pq+XLeUlXkPznJ0HrSkHA9keocNhV+csu6Zo="
+  crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/uikit/3.0.0-rc.6/js/uikit-icons.min.js" integrity="sha256-w38UjohynFpNOMjhZJ/oUIo/Md7D4tpQQJri5qDDTlE="
+  crossorigin="anonymous"></script>
 </html>
